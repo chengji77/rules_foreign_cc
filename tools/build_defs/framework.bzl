@@ -52,6 +52,9 @@ CC_EXTERNAL_RULE_ATTRIBUTES = {
     #
     # Optional part of the shell script to be added after the make commands
     "postfix_script": attr.string(mandatory = False),
+    #
+    # Run before ./configure or cmake. for autogen.sh etc.
+    "prefix_script": attr.string_list(mandatory = False, default = []),
     # Optinal make commands, defaults to ["make", "make install"]
     "make_commands": attr.string_list(mandatory = False, default = ["make", "make install"]),
     #
@@ -234,6 +237,7 @@ def cc_external_rule_impl(ctx, attrs):
         "export BUILD_TMPDIR=##tmpdir##",
         "export EXT_BUILD_DEPS=##tmpdir##",
         "export INSTALLDIR=$$EXT_BUILD_ROOT$$/" + empty.file.dirname + "/" + lib_name,
+        "export EXT_BUILD_LIB_ROOT=${EXT_BUILD_ROOT}/" + detect_root(ctx.attr.lib_source),
     ]
 
     script_lines = [
@@ -247,6 +251,7 @@ def cc_external_rule_impl(ctx, attrs):
         _print_env(),
         "\n".join(_copy_deps_and_tools(inputs)),
         "cd $$BUILD_TMPDIR$$",
+        "\n".join(attrs.prefix_script),
         attrs.create_configure_script(ConfigureParameters(ctx = ctx, attrs = attrs, inputs = inputs)),
         "\n".join(attrs.make_commands),
         attrs.postfix_script or "",
@@ -448,9 +453,9 @@ def _symlink_contents_to_dir(dir_name, files_list):
     lines = ["##mkdirs## $$EXT_BUILD_DEPS$$/" + dir_name]
 
     for file in files_list:
-      path = _file_path(file).strip()
-      if path:
-        lines += ["##symlink_contents_to_dir## \
+        path = _file_path(file).strip()
+        if path:
+            lines += ["##symlink_contents_to_dir## \
 $$EXT_BUILD_ROOT$$/{} $$EXT_BUILD_DEPS$$/{}".format(path, dir_name)]
 
     return lines
@@ -609,7 +614,8 @@ def get_foreign_cc_dep(dep):
 # consider optimization here to do not iterate both collections
 def _get_headers(compilation_info):
     include_dirs = compilation_info.system_includes.to_list() + \
-      compilation_info.includes.to_list()
+                   compilation_info.includes.to_list()
+
     # do not use quote includes, currently they do not contain
     # library-specific information
     include_dirs = collections.uniq(include_dirs)
@@ -623,9 +629,18 @@ def _get_headers(compilation_info):
                 break
         if not included:
             headers += [header]
+
+    final_include_dirs = []
+    for include_dir in include_dirs:
+        if "/_virtual_includes/" in include_dir:
+            headers = []
+            final_include_dirs += [include_dir]
+            break
+
     return struct(
-        headers = headers,
-        include_dirs = include_dirs,
+        #        headers = headers,
+        headers = [],
+        include_dirs = final_include_dirs,
     )
 
 def _define_out_cc_info(ctx, attrs, inputs, outputs):
