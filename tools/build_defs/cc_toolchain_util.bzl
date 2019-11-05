@@ -78,7 +78,7 @@ def _create_libraries_to_link(ctx, files):
 
     static_map = _files_map(_filter(files.static_libraries or [], _is_position_independent, True))
     pic_static_map = _files_map(_filter(files.static_libraries or [], _is_position_independent, False))
-    shared_map = _files_map(files.shared_libraries or [])
+    shared_map = {f.basename : f for f in (files.shared_libraries or [])}
     interface_map = _files_map(files.interface_libraries or [])
 
     names = collections.uniq(static_map.keys() + pic_static_map.keys() + shared_map.keys() + interface_map.keys())
